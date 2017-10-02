@@ -1,0 +1,352 @@
+---
+output: html_document
+---
+
+```{r setup, include=FALSE}
+knitr::opts_chunk$set(echo = TRUE)
+```
+
+# Pipeline to RevBayes Scripts
+This is a four part pipeline which consists of the following:
+<ol>
+<li>Create Subsets</li>
+<li>Remove Outgroups</li>
+<li>Create Rev Schemes</li>
+<li>Create RevBayes Scripts</li>
+</ol>
+
+```{r, eval=FALSE, echo=TRUE}
+# WORKING DIRECTORY
+setwd("/Users/treehouse5/Dropbox/effect_of_partitioning/step_2_shakedown_runs")
+
+# LIBRARIES
+library(revtools)
+
+# LOAD IN STUDIES
+datasets = read.csv("scripts/R/studies.txt", header=FALSE, as.is=TRUE)
+```
+
+## (1) Create Subsets
+The following for loop creates in a given folder under /data of subset cuts of the study alignments.
+<br>
+<br>
+<b>Directions:</b> Create a folder in in /data called /subsets.
+
+```{r, eval=FALSE}
+for (i in 1:length(datasets)) {
+    subsets = paste("data/subsets/", datasets[,1][i], sep="")
+    
+    # ALIGNMENT FILE LOCATIONS
+    nexus = paste("data/alignments/", datasets[,1][i], "/", datasets[,1][i],".nex", sep="")
+    phylip = paste("data/alignments/", datasets[,1][i], "/", datasets[,1][i],".phy", sep="")
+  
+    # CHOOSE ALIGNMENT FILE
+    if (file.exists(nexus)==1) {
+        alignment = nexus
+    }
+    if (file.exists(nexus)==0){
+        alignment = phylip
+    }
+    if (file.exists(phylip)==0 & file.exists(nexus)==0){
+        alignment = NULL
+    }
+    
+    # CONFIG FILE LOCATIONS
+    bic_config = paste("data/partition_finder/",datasets[,1][i],"/analysis_bic/partition_finder.cfg", sep="")
+    gene_config = paste("data/partition_finder/", datasets[,1][i], "/analysis_gene/partition_finder.cfg", sep="")
+  
+    # CHOOSE CONFIG FILE
+    if (file.exists(bic_config)){
+        pfconfig = bic_config
+    } else {
+        pfconfig = gene_config 	
+    }  
+  
+    # CREATE THE SUBSETS
+    subdivideAlignment(aln.in = alignment, dir.out = subsets, get.charsets.from = pfconfig)
+    
+    # KEEP TRACK OF STUDY
+    cat(datasets[i,],"\n")
+}
+```
+
+
+## (2) Remove Outgroups
+<b>Directions:</b> Before being able to remove outgroups, you have to create the following directories under the /data directory.
+<ol>
+<li>A folder called /subsets_no_outgroups under /data</li>
+<li>Folders for each of the studies within /subsets_no_outgroups</li>
+</ol>
+
+```{r, eval=FALSE}
+rooting_info = readLines("data/rooting_info.txt")
+rooting_info = strsplit(rooting_info,"\t")
+groups       = sapply(rooting_info,function(x) x[1])
+rooting_info = lapply(rooting_info,function(x) x[-1])
+names(rooting_info) = groups
+
+datasets2 <- list.files("data/alignments/")
+
+for(dataset in datasets2) {
+    # KEEP TRACK OF STUDIES
+    cat(dataset,"\n")
+  
+    # GET OUTGROUP INFORMATION
+    outgroups = rooting_info[[dataset]]
+  
+    # LOOP OVER ALIGNMENTS, REMOVE OUTGROUPS, AND WRITE NEW ALIGNMENTS
+    sequence_files = list.files(paste0("data/subsets/", dataset), full.names=TRUE)
+  
+    for(seq in sequence_files) {
+        seq_name = strsplit(seq,"/")[[1]]
+        seq_name = seq_name[length(seq_name)]
+        this_alignment = readAlignment(seq)
+        this_alignment_pruned = this_alignment[!rownames(this_alignment) %in% outgroups,]
+    
+    # WRITE NEW SUBSET ALIGNMENT FILES WITHOUT OUTGROUPS
+    writeAlignment(this_alignment_pruned, paste0("data/subsets_no_outgroups/",dataset,"/",seq_name))
+  }
+  
+}
+```
+
+
+## (3) Create Rev Schemes
+<b>Directions:</b> Before being able to generate Rev Schemes, you have to create the following directories under the /data directory.
+<ol>
+<li>A folder called /rev_schemes under /data</li>
+<li>Folders for each of the studies within /rev_schemes</li>
+</ol>
+
+### BIC Rev Schemes
+```{r, eval=FALSE}
+for (i in 1:length(datasets)) {
+    cat(datasets[,1][i], ": ")
+    best_scheme = paste("data/partition_finder/", datasets[,1][i], "/analysis_bic/best_scheme.txt", sep="")
+    rev_scheme = paste("data/rev_schemes/", datasets[,1][i], "/rev_scheme_bic.csv", sep="")
+    bestScheme2revScheme(best_scheme, rev_scheme)
+}
+
+```
+
+### AIC Rev Schemes
+```{r, eval=FALSE}
+for (i in 1:length(datasets)) {
+    cat(datasets[,1][i], ": ")
+    best_scheme = paste("data/partition_finder/", datasets[,1][i], "/analysis_aic/best_scheme.txt", sep="")
+    rev_scheme = paste("data/rev_schemes/", datasets[,1][i], "/rev_scheme_aic.csv", sep="")
+    bestScheme2revScheme(best_scheme, rev_scheme)
+}
+```
+
+### Saturated Rev Schemes
+```{r, eval=FALSE}
+for (i in 1:length(datasets)) {
+    cat(datasets[,1][i], ": ")
+    best_scheme = paste("data/partition_finder/", datasets[,1][i], "/analysis_all_apart/best_scheme.txt", sep="")
+    rev_scheme = paste("data/rev_schemes/", datasets[,1][i], "/rev_scheme_all_apart.csv", sep="")
+    bestScheme2revScheme(best_scheme, rev_scheme)
+}
+```
+
+### Concatenated Rev Schemes
+```{r, eval=FALSE}
+for (i in 1:length(datasets)) {
+    cat(datasets[,1][i], ": ")
+    best_scheme = paste("data/partition_finder/", datasets[,1][i], "/analysis_together/best_scheme.txt", sep="")
+    rev_scheme = paste("data/rev_schemes/", datasets[,1][i], "/rev_scheme_together.csv", sep="")
+    bestScheme2revScheme(best_scheme, rev_scheme)
+}
+```
+
+### Gene Rev Schemes
+```{r, eval=FALSE}
+for (i in 1:length(datasets)) {
+    cat(datasets[,1][i], ": ")
+    best_scheme = paste("data/partition_finder/", datasets[,1][i], "/analysis_gene/best_scheme.txt", sep="")
+    rev_scheme = paste("data/rev_schemes/", datasets[,1][i], "/rev_scheme_gene.csv", sep="")
+    bestScheme2revScheme(best_scheme, rev_scheme)
+}
+```
+
+
+## (4) Create RevBayes Scripts
+<b>Directions:</b> The folder for the study 196_8 gets special treatment for this part of the pipeline. If you look at 196_8's subsets_no_outgroups folder, there are two subfolders which contain the same alignment subsections by different names. I have also provided a README in that folder about 196_8. You have to make sure you have files named without "codon" for the BIC and AIC criteria. For the Concatenated, Saturated, and by Gene schemes, you have to use the files named with "codon".
+
+```{r, eval=FALSE}
+# LOAD IN RHO INFORMATION
+rhos = read.csv("output/R/rhos.csv", header=FALSE, as.is=TRUE)
+```
+
+
+### BIC and AIC RevBayes Scripts
+For the next two cell blocks, use the "<u>without</u> codon" subset alignments for 196_8.
+
+```{r, eval=FALSE}
+# BIC: MAKE BIC RB SCRIPTS
+for (i in 1:length(datasets[,1])){
+  # CURRENT DATASET (Plucking from subsets_no_outgroups folder)
+  current_dataset = paste("data/subsets_no_outgroups/", datasets[,1][i], sep="")
+  cat(current_dataset, "\n")
+  
+  # DATASET SUBSETS
+  subset_list = list.files(current_dataset, full.names = TRUE)
+  
+  # REV SCHEME FILE LOCATION
+  rev_scheme = paste("data/rev_schemes/", datasets[,1][i], "/rev_scheme_bic.csv", sep="")
+  
+  # MAKE DIRECTORY
+  dir.create(paste("scripts/RevBayes/", datasets[,1][i], sep=""))
+  
+  # NAMING OUTPUT FILE
+  name = paste("output/RevBayes/", datasets[,1][i],"/",datasets[,1][i], "_bic", sep="")
+  
+  for(j in 1:length(rhos)){
+    if (grepl(datasets[,1][i],rhos[j,1])) {
+      # debugging statement
+      rho = rhos[j,4]
+    }
+  }
+  
+  # CREATE AND WRITE OUTPUT
+  script = partitionedModel(data=subset_list, config=rev_scheme, name=name, rho=rho, simplify=FALSE, write=FALSE, ngen=10000, clock="UCLN")
+  writeLines(script, paste("scripts/RevBayes/", datasets[,1][i],"/",datasets[,1][i], "_bic.Rev", sep=""))
+}
+```
+
+```{r, eval=FALSE}
+# AIC: MAKE AIC RB SCRIPTS
+for (i in 1:length(datasets[,1])){
+  # CURRENT DATASET (Plucking from subsets_no_outgroups folder)
+  current_dataset = paste("data/subsets_no_outgroups/", datasets[,1][i], sep="")
+  cat(current_dataset, "\n")
+  
+  # DATASET SUBSETS
+  subset_list = list.files(current_dataset, full.names = TRUE)
+  
+  # REV SCHEME FILE LOCATION
+  rev_scheme = paste("data/rev_schemes/", datasets[,1][i], "/rev_scheme_aic.csv", sep="")
+  
+  # MAKE DIRECTORY
+  dir.create(paste("scripts/RevBayes/", datasets[,1][i], sep=""))
+  
+  # NAMING OUTPUT FILE
+  name = paste("output/RevBayes/", datasets[,1][i],"/",datasets[,1][i], "_aic", sep="")
+  
+  for(j in 1:length(rhos)){
+    if (grepl(datasets[,1][i],rhos[j,1])) {
+      # debugging statement
+      rho = rhos[j,4]
+    }
+  }
+  
+  # CREATE AND WRITE OUTPUT
+  script = partitionedModel(data=subset_list, config=rev_scheme, name=name, rho=rho, simplify=FALSE, write=FALSE, ngen=10000, clock="UCLN")
+  writeLines(script, paste("scripts/RevBayes/", datasets[,1][i],"/",datasets[,1][i], "_aic.Rev", sep=""))
+}
+```
+
+
+### Contatenated, Saturated, and By Gene RevBayes Scripts
+For the next three cell blocks, use the "<u>with</u> codon" subset alignments for 196_8.
+
+```{r, eval=FALSE}
+# SATURATED: MAKE RB SCRIPTS
+for (i in 1:length(datasets[,1])){
+  # CURRENT DATASET (Plucking from subsets_no_outgroups folder)
+  current_dataset = paste("data/subsets_no_outgroups/", datasets[,1][i], sep="")
+  cat(current_dataset, "\n")
+  
+  # DATASET SUBSETS
+  subset_list = list.files(current_dataset, full.names = TRUE)
+  
+  # REV SCHEME FILE LOCATION
+  rev_scheme = paste("data/rev_schemes/", datasets[,1][i], "/rev_scheme_all_apart.csv", sep="")
+  
+  # MAKE DIRECTORY
+  dir.create(paste("scripts/RevBayes/", datasets[,1][i], sep=""))
+  
+  # NAMING OUTPUT FILE
+  name = paste("output/RevBayes/", datasets[,1][i],"/",datasets[,1][i], "_all_apart", sep="")
+  
+  for(j in 1:length(rhos)){
+    if (grepl(datasets[,1][i],rhos[j,1])) {
+      # debugging statement
+      rho = rhos[j,4]
+    }
+  }
+  
+  # CREATE AND WRITE OUTPUT
+  script = partitionedModel(data=subset_list, config=rev_scheme, name=name, rho=rho, simplify=FALSE, write=FALSE, ngen=10000, clock="UCLN")
+  writeLines(script, paste("scripts/RevBayes/", datasets[,1][i],"/",datasets[,1][i], "_all_apart.Rev", sep=""))
+}
+```
+
+```{r, eval=FALSE}
+# CONCATENATED MODEL (ALL TOGETHER): MAKE RB SCRIPTS
+for (i in 1:length(datasets[,1])){
+  # CURRENT DATASET (Plucking from subsets_no_outgroups folder)
+  current_dataset = paste("data/subsets_no_outgroups/", datasets[,1][i], sep="")
+  cat(current_dataset, "\n")
+  
+  # DATASET SUBSETS
+  subset_list = list.files(current_dataset, full.names = TRUE)
+  
+  # REV SCHEME FILE LOCATION
+  rev_scheme = paste("data/rev_schemes/", datasets[,1][i], "/rev_scheme_together.csv", sep="")
+  
+  # MAKE DIRECTORY
+  dir.create(paste("scripts/RevBayes/", datasets[,1][i], sep=""))
+  
+  # NAMING OUTPUT FILE
+  name = paste("output/RevBayes/", datasets[,1][i],"/",datasets[,1][i], "_together", sep="")
+  
+  for(j in 1:length(rhos)){
+    if (grepl(datasets[,1][i],rhos[j,1])) {
+      # debugging statement
+      rho = rhos[j,4]
+    }
+  }
+  
+  # CREATE AND WRITE OUTPUT
+  script = partitionedModel(data=subset_list, config=rev_scheme, name=name, rho=rho, simplify=FALSE, write=FALSE, ngen=10000, clock="UCLN")
+  writeLines(script, paste("scripts/RevBayes/", datasets[,1][i],"/",datasets[,1][i], "_together.Rev", sep=""))
+}
+```
+
+```{r, eval=FALSE}
+# GENE MODEL: MAKE RB SCRIPTS
+for (i in 1:length(datasets[,1])){
+  # CURRENT DATASET (Plucking from subsets_no_outgroups folder)
+  current_dataset = paste("data/subsets_no_outgroups/", datasets[,1][i], sep="")
+  cat(current_dataset, "\n")
+  
+  # DATASET SUBSETS
+  subset_list = list.files(current_dataset, full.names = TRUE)
+  
+  # REV SCHEME FILE LOCATION
+  rev_scheme = paste("data/rev_schemes/", datasets[,1][i], "/rev_scheme_gene.csv", sep="")
+  
+  # MAKE DIRECTORY
+  dir.create(paste("scripts/RevBayes/", datasets[,1][i], sep=""))
+  
+  # NAMING OUTPUT FILE
+  name = paste("output/RevBayes/", datasets[,1][i],"/",datasets[,1][i], "_gene", sep="")
+  
+  for(j in 1:length(rhos)){
+    if (grepl(datasets[,1][i],rhos[j,1])) {
+      # debugging statement
+      rho = rhos[j,4]
+    }
+  }
+  
+  # CREATE AND WRITE OUTPUT
+  script = partitionedModel(data=subset_list, config=rev_scheme, name=name, rho=rho, simplify=FALSE, write=FALSE, ngen=10000, clock="UCLN")
+  writeLines(script, paste("scripts/RevBayes/", datasets[,1][i],"/",datasets[,1][i], "_gene.Rev", sep=""))
+}
+```
+
+<b>Now, we have the scripts!</b> What I did next was implement another algorithm to correct the scripts due to a small naming error in certain scripts.
+<br>
+<br>
+In order to run the RevBayes scripts, put all the 196_8 files into the subsets_no_outgroups folder.
